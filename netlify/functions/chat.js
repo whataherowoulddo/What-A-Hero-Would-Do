@@ -1,3 +1,5 @@
+const https = require('https');
+
 exports.handler = async function(event, context) {
   // 1. Handle browser pre-checks gracefully
   if (event.httpMethod === "OPTIONS") {
@@ -20,45 +22,58 @@ exports.handler = async function(event, context) {
     const { systemPrompt, messages } = JSON.parse(event.body);
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
-    // 2. Alert you via Netlify logs if your key is missing in your settings
     if (!apiKey) {
-      console.error("CRITICAL CONFIG ERROR: Your ANTHROPIC_API_KEY is missing from Netlify settings!");
       return {
         statusCode: 500,
         headers: { "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: "API Key missing in Netlify dashboard environment variables." })
+        body: JSON.stringify({ error: "API Key missing in Netlify dashboard settings." })
       };
     }
 
-    // 3. Requesting Claude using a clean, active, upgraded model string
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6", // Upgraded to the standard active model structure
-        system: systemPrompt,
-        messages: messages
-      })
+    // 2. Prepare the clean structured data for Claude
+    const requestData = JSON.stringify({
+      model: "claude-sonnet-4-6", 
+      system: systemPrompt,
+      messages: messages,
+      max_tokens: 1000
     });
 
-    const data = await response.json();
+    // 3. Use Node's built-in, native secure network sender (never fails on Netlify)
+    const result = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.anthropic.com',
+        path: '/v1/messages',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Length': Buffer.byteLength(requestData)
+        }
+      };
 
-    // 4. Return the outcome to your HTML page
+      const req = https.request(options, (res) => {
+        let body = '';
+        res.on('data', (chunk) => body += chunk);
+        res.on('end', () => resolve({ statusCode: res.statusCode, body }));
+      });
+
+      req.on('error', (e) => reject(e));
+      req.write(requestData);
+      req.end();
+    });
+
+    // 4. Return the response back cleanly to your HTML screen
     return {
-      statusCode: response.status,
+      statusCode: result.statusCode,
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*"
       },
-      body: JSON.stringify(data)
+      body: result.body
     };
 
   } catch (error) {
-    console.error("LOGGED REJECTION:", error);
     return {
       statusCode: 500,
       headers: { "Access-Control-Allow-Origin": "*" },
