@@ -1,5 +1,5 @@
 exports.handler = async function(event, context) {
-  // 1. Handle preflight browser checks (CORS safety)
+  // 1. Handle browser pre-checks gracefully
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -20,17 +20,17 @@ exports.handler = async function(event, context) {
     const { systemPrompt, messages } = JSON.parse(event.body);
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
-    // 2. Extra safety check if your key is missing in Netlify settings
+    // 2. Alert you via Netlify logs if your key is missing in your settings
     if (!apiKey) {
-      console.error("ERROR: ANTHROPIC_API_KEY environment variable is missing!");
+      console.error("CRITICAL CONFIG ERROR: Your ANTHROPIC_API_KEY is missing from Netlify settings!");
       return {
         statusCode: 500,
         headers: { "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: "API key configuration missing on Netlify dashboard." })
+        body: JSON.stringify({ error: "API Key missing in Netlify dashboard environment variables." })
       };
     }
 
-    // 3. Request to Anthropic using modern global fetch
+    // 3. Requesting Claude using a clean, active, upgraded model string
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -39,8 +39,7 @@ exports.handler = async function(event, context) {
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022", // Updated to a stable standard identifier
-        max_tokens: 1000,
+        model: "claude-sonnet-4-6", // Upgraded to the standard active model structure
         system: systemPrompt,
         messages: messages
       })
@@ -48,18 +47,18 @@ exports.handler = async function(event, context) {
 
     const data = await response.json();
 
-    // 4. Return response back to your HTML frontend
+    // 4. Return the outcome to your HTML page
     return {
       statusCode: response.status,
       headers: {
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*" // Allows your HTML file to receive the text safely
+        "Access-Control-Allow-Origin": "*"
       },
       body: JSON.stringify(data)
     };
 
   } catch (error) {
-    console.error("SYSTEM ERROR:", error);
+    console.error("LOGGED REJECTION:", error);
     return {
       statusCode: 500,
       headers: { "Access-Control-Allow-Origin": "*" },
